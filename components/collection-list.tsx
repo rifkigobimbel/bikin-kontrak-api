@@ -66,7 +66,8 @@ export function CollectionList({
             No collections yet. Create one to start!
           </p>
         ) : (
-          collections.map(collection => (
+          <>
+          {collections.map(collection => (
             <div
               key={collection.id}
               className={`group p-3 rounded-lg cursor-pointer transition-colors ${
@@ -94,7 +95,9 @@ export function CollectionList({
                 </button>
               </div>
             </div>
-          ))
+          ))}
+          <small className='text-xs text-muted-foreground p-1'>All your collections are stored locally in your browser</small>
+          </>
         )}
       </div>
 
@@ -113,7 +116,7 @@ export function CollectionList({
                   setDeleteId(null)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>
