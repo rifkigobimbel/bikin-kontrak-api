@@ -7,7 +7,6 @@ import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +24,7 @@ import {
 import { ApiItemForm } from '@/components/api-item-form'
 import { exportAsMarkdown, exportAsPostman, exportAsTypeScript, downloadFile } from '@/lib/export'
 import type { Collection, ApiItem } from '@/lib/types'
+import { useDebounce } from '@/hooks/use-debounce'
 
 interface CollectionEditorProps {
   collection: Collection
@@ -49,6 +49,16 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
   const [detailItem, setDetailItem] = useState<ApiItem | null>(null)
   const [isEditingBasePath, setIsEditingBasePath] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [searchValue, setSearchValue] = useState('')
+  const debouncedSearch = useDebounce(searchValue, 300)
+
+  const filteredItems = debouncedSearch
+    ? collection.items.filter(item =>
+        item.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        item.path.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        item.description.toLowerCase().includes(debouncedSearch.toLowerCase())
+      )
+    : collection.items
 
   const handleCreateItem = () => {
     const newItem: ApiItem = {
@@ -312,15 +322,28 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
 
       <Separator />
 
+      {collection.items.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Input type='search' placeholder="Search endpoints..." value={searchValue} onChange={e => setSearchValue(e.target.value)} />
+        </div>
+      )}
+      
+
       {/* API Items List - Grouped by Module */}
       <div className="space-y-6">
-        {collection.items.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <Card className="p-12 flex flex-col items-center justify-center text-center">
-            <p className="text-muted-foreground mb-4">No API endpoints yet</p>
-            <Button onClick={handleCreateItem} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Create Your First Endpoint
-            </Button>
+            {!debouncedSearch ? (
+              <>
+                <FileText className="w-10 h-10 mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">No endpoints yet. Click "Add Endpoint" to create your first one!</p>
+              </>
+            ) : (
+              <>
+                <FileText className="w-10 h-10 mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">No endpoints found for <span className="font-bold">"{debouncedSearch}"</span></p>
+              </>
+            )}
           </Card>
         ) : (
           Object.entries(groupedItems).map(([module, items]) => (
