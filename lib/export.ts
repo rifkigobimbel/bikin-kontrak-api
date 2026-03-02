@@ -20,6 +20,7 @@ export function exportAsMarkdown(collection: Collection): string {
 
     const fullPath = collection.basePath ? `${collection.basePath}${item.path}` : item.path
     lines.push(`**Method:** \`${item.method}\``)
+    lines.push('')
     lines.push(`**Path:** \`${fullPath}\``)
     lines.push('')
 
