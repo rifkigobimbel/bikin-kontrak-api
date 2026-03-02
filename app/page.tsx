@@ -6,6 +6,7 @@ import { CollectionEditor } from '@/components/collection-editor'
 import { Header } from '@/components/header'
 import { loadCollections, saveCollections, clearAllCollections } from '@/lib/indexeddb'
 import type { Collection } from '@/lib/types'
+import { toast } from 'sonner'
 
 export default function Home() {
   const [collections, setCollections] = useState<Collection[]>([])
@@ -29,6 +30,11 @@ export default function Home() {
   }, [collections, isLoaded])
 
   const handleCreateCollection = (title: string) => {
+    const findExisting = collections.find(col => col.title === title)
+    if (findExisting) {
+      toast.info('A collection with this title already exists. Please choose a different name.')
+      return
+    }
     const newCollection: Collection = {
       id: Date.now().toString(),
       title,
@@ -40,6 +46,11 @@ export default function Home() {
   }
 
   const handleUpdateCollection = (updatedCollection: Collection) => {
+    const findExisting = collections.find(col => col.title === updatedCollection.title && col.id !== updatedCollection.id)
+    if (findExisting) {
+      toast.info('A collection with this title already exists. Please choose a different name.')
+      return
+    }
     setCollections(
       collections.map(col => (col.id === updatedCollection.id ? updatedCollection : col))
     )
