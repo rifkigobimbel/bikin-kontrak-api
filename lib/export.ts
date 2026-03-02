@@ -4,9 +4,9 @@ export function exportAsMarkdown(collection: Collection): string {
   const lines: string[] = []
 
   lines.push(`# ${collection.title}`)
-  if (collection.basePath) {
-    lines.push(`**Base Path:** \`${collection.basePath}\``)
-  }
+  // if (collection.basePath) {
+  //   lines.push(`**Base Path:** \`${collection.basePath}\``)
+  // }
   lines.push('')
 
   collection.items.forEach((item, index) => {
@@ -19,7 +19,8 @@ export function exportAsMarkdown(collection: Collection): string {
     }
 
     const fullPath = collection.basePath ? `${collection.basePath}${item.path}` : item.path
-    lines.push(`**Method:** \`${item.method}\` **Path:** \`${fullPath}\``)
+    lines.push(`**Method:** \`${item.method}\``)
+    lines.push(`**Path:** \`${fullPath}\``)
     lines.push('')
 
     if (item.params.length > 0) {
