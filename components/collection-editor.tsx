@@ -75,7 +75,7 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
     setEditingItem(newItem)
   }
 
-  const groupedItems = (collection.items || []).reduce((acc, item) => {
+  const groupedItems = (filteredItems || []).reduce((acc, item) => {
     const module = item.path ? item.path.split('/')[1] || 'root' : 'ungrouped'
     if (!acc[module]) {
       acc[module] = []
