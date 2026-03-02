@@ -1,12 +1,12 @@
-import type { Collection, ApiItem, ApiParam } from './types'
+import type { Collection, ApiItem } from './types'
 
 export function exportAsMarkdown(collection: Collection): string {
   const lines: string[] = []
 
   lines.push(`# ${collection.title}`)
-  // if (collection.basePath) {
-  //   lines.push(`**Base Path:** \`${collection.basePath}\``)
-  // }
+  if (collection.basePath) {
+    lines.push(`**Base Path:** \`${collection.basePath}\``)
+  }
   lines.push('')
 
   collection.items.forEach((item, index) => {
@@ -19,9 +19,7 @@ export function exportAsMarkdown(collection: Collection): string {
     }
 
     const fullPath = collection.basePath ? `${collection.basePath}${item.path}` : item.path
-    lines.push(`**Method:** \`${item.method}\``)
-    lines.push('')
-    lines.push(`**Path:** \`${fullPath}\``)
+    lines.push(`**Method:** \`${item.method}\` **Path:** \`${fullPath}\``)
     lines.push('')
 
     if (item.params.length > 0) {
@@ -137,154 +135,33 @@ export function exportAsPostman(collection: Collection) {
   return postmanCollection
 }
 
-function parseJsonToType(json: string): string {
-  try {
-    const parsed = JSON.parse(json)
-    console.log(parsed)
-    return resolveRoot(parsed)
-  } catch(e) {
-    console.log(e)
-    return 'unknown'
-  }
-}
-
-function resolveRoot(value: any): string {
-  if (Array.isArray(value)) {
-    return resolveArray(value)
-  }
-  return resolveType(value)
-}
-
-function resolveType(value: any): string {
-  if (value === null) return 'null'
-
-  if (Array.isArray(value)) {
-    return resolveArray(value)
-  }
-
-  switch (typeof value) {
-    case 'string':
-      return 'string'
-    case 'number':
-      return 'number'
-    case 'boolean':
-      return 'boolean'
-    case 'object':
-      return resolveObject(value)
-    default:
-      return 'unknown'
-  }
-}
-
-function resolveArray(arr: any[]): string {
-  if (arr.length === 0) return 'unknown[]'
-
-  if (arr.every(item => typeof item === 'object' && item !== null && !Array.isArray(item))) {
-    return `${mergeObjectArray(arr)}[]`
-  }
-
-  const types = Array.from(new Set(arr.map(item => resolveType(item))))
-  return types.length === 1
-    ? `${types[0]}[]`
-    : `(${types.join(' | ')})[]`
-}
-
-function mergeObjectArray(arr: Record<string, any>[]): string {
-  const keyMap: Record<string, any[]> = {}
-
-  arr.forEach(obj => {
-    Object.keys(obj).forEach(key => {
-      if (!keyMap[key]) keyMap[key] = []
-      keyMap[key].push(obj[key])
-    })
-  })
-
-  const allKeys = new Set(arr.flatMap(obj => Object.keys(obj)))
-
-  const fields = Array.from(allKeys).map(key => {
-    const values = keyMap[key] || []
-    const types = Array.from(new Set(values.map(v => resolveType(v))))
-    const optional = values.length < arr.length
-    const safeKey = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key) ? key : `"${key}"`
-    const finalType = types.length === 1 ? types[0] : `(${types.join(' | ')})`
-    return `  ${safeKey}${optional ? '?' : ''}: ${finalType}`
-  })
-
-  return `{\n${fields.join('\n')}\n}`
-}
-
-function resolveObject(obj: Record<string, any>): string {
-  const entries = Object.entries(obj)
-  if (entries.length === 0) return '{}'
-
-  const fields = entries.map(([key, value]) => {
-    const safeKey = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key) ? key : `"${key}"`
-    return `  ${safeKey}: ${resolveType(value)}`
-  })
-
-  return `{\n${fields.join('\n')}\n}`
-}
-
 export function exportAsTypeScript(collection: Collection): string {
   const lines: string[] = []
 
-  const toSafeName = (value: string) =>
-    value.replace(/[^a-zA-Z0-9]/g, '').replace(/^(\d)/, '_$1')
-
-  const toSafeKey = (value: string) =>
-    /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value) ? value : `"${value}"`
-
-  const mapParamType = (param: ApiParam): string => {
-    switch (param.type) {
-      case 'string':
-        return 'string'
-      case 'number':
-        return 'number'
-      case 'boolean':
-        return 'boolean'
-      case 'enum':
-        if (param.enumValues?.trim()) {
-          return param.enumValues
-            .split(',')
-            .map(v => `'${v.trim()}'`)
-            .join(' | ')
-        }
-        return 'string'
-      default:
-        return 'unknown'
-    }
-  }
-
-  lines.push(`// =========================================`)
   lines.push(`// API Collection: ${collection.title}`)
-  lines.push(`// Auto-generated TypeScript Types`)
-  lines.push(`// Generated at: ${new Date().toISOString()}`)
-  lines.push(`// =========================================`)
+  lines.push(`// Auto-generated TypeScript interfaces`)
   lines.push('')
 
-  collection.items.forEach((item) => {
-    const safeName = toSafeName(item.title)
+  // Generate request and response types for each endpoint
+  collection.items.forEach((item, index) => {
+    const safeName = item.title.replace(/[^a-zA-Z0-9]/g, '').replace(/^(\d)/, '_$1')
     const requestName = `${safeName}Request`
     const responseName = `${safeName}Response`
     const endpointName = `${safeName}Endpoint`
 
-    lines.push(`// -----------------------------------------`)
     lines.push(`// ${item.title}`)
     if (item.description) {
       lines.push(`// ${item.description}`)
     }
-    lines.push(`// -----------------------------------------`)
     lines.push('')
 
+    // Request interface
     const requestFields: string[] = []
-
     if (item.params.length > 0) {
       requestFields.push(`  params?: {`)
       item.params.forEach(param => {
         const desc = param.description ? ` // ${param.description}` : ''
-        requestFields.push(
-          `    ${toSafeKey(param.key)}?: ${mapParamType(param)}${desc}`
-        )
+        requestFields.push(`    ${param.key}?: string | number${desc}`)
       })
       requestFields.push(`  }`)
     }
@@ -292,62 +169,64 @@ export function exportAsTypeScript(collection: Collection): string {
     if (item.headers.length > 0) {
       requestFields.push(`  headers?: {`)
       item.headers.forEach(header => {
-        requestFields.push(
-          `    ${toSafeKey(header.key)}?: string`
-        )
+        requestFields.push(`    "${header.key}"?: string`)
       })
       requestFields.push(`  }`)
     }
 
-    if (item.body?.trim()) {
-      requestFields.push(
-        `  body?: ${parseJsonToType(item.body)}`
-      )
+    if (item.body && item.body.trim()) {
+      requestFields.push(`  body?: ${parseJsonToInterface(item.body)}`)
     }
 
     if (requestFields.length > 0) {
-      lines.push(`export type ${requestName} = {`)
+      lines.push(`export interface ${requestName} {`)
       lines.push(...requestFields)
       lines.push(`}`)
       lines.push('')
     }
 
-    if (item.response?.trim()) {
-      lines.push(
-        `export type ${responseName} = ${parseJsonToType(item.response)}`
-      )
+    // Response interface
+    if (item.response && item.response.trim()) {
+      lines.push(`export interface ${responseName} extends ${parseJsonToInterface(item.response)} {}`)
       lines.push('')
     }
 
-    lines.push(`export type ${endpointName} = {`)
+    // Endpoint metadata interface
+    lines.push(`export interface ${endpointName} {`)
     lines.push(`  method: '${item.method}'`)
-    lines.push(`  path: '${item.path}'`)
-
+    lines.push(`  path: string`)
     if (requestFields.length > 0) {
-      lines.push(`  request: ${requestName}`)
+      lines.push(`  request?: ${requestName}`)
     }
-
-    if (item.response?.trim()) {
-      lines.push(`  response: ${responseName}`)
+    if (item.response && item.response.trim()) {
+      lines.push(`  response?: ${responseName}`)
     }
-
     lines.push(`}`)
     lines.push('')
   })
 
-  const collectionName = toSafeName(collection.title)
+  // Generate a collection interface
+  const endpointInterfaces = collection.items.map((item) => {
+    const safeName = item.title.replace(/[^a-zA-Z0-9]/g, '').replace(/^(\d)/, '_$1')
+    return `${safeName}Endpoint`
+  })
 
-  lines.push(`export type ${collectionName}Collection = {`)
-  collection.items.forEach((item) => {
-    const safeName = toSafeName(item.title)
-    const endpointName = `${safeName}Endpoint`
-    const propName =
-      endpointName.charAt(0).toLowerCase() + endpointName.slice(1)
-    lines.push(`  ${propName}: ${endpointName}`)
+  lines.push(`export interface ${collection.title.replace(/[^a-zA-Z0-9]/g, '')}Collection {`)
+  endpointInterfaces.forEach(iface => {
+    lines.push(`  ${iface[0].toLowerCase() + iface.slice(1)}: ${iface}`)
   })
   lines.push(`}`)
 
   return lines.join('\n')
+}
+
+function parseJsonToInterface(json: string): string {
+  try {
+    JSON.parse(json)
+    return 'Record<string, unknown>'
+  } catch {
+    return 'Record<string, unknown>'
+  }
 }
 
 export function downloadFile(content: string, filename: string, type: string) {

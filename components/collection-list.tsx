@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import type { Collection } from '@/lib/types'
-import { useDebounce } from '@/hooks/use-debounce'
 
 interface CollectionListProps {
   collections: Collection[]
@@ -33,8 +32,6 @@ export function CollectionList({
 }: CollectionListProps) {
   const [newTitle, setNewTitle] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [searchValue, setSearchValue] = useState('')
-  const debouncedSearch = useDebounce(searchValue, 300)
 
   const handleCreate = () => {
     if (newTitle.trim()) {
@@ -42,12 +39,6 @@ export function CollectionList({
       setNewTitle('')
     }
   }
-
-  const filteredCollections = debouncedSearch
-    ? collections.filter(c =>
-        c.title.toLowerCase().includes(debouncedSearch.toLowerCase())
-      )
-    : collections
 
   return (
     <div className="space-y-4">
@@ -75,16 +66,7 @@ export function CollectionList({
             No collections yet. Create one to start!
           </p>
         ) : (
-          <>
-          {collections.length > 1 && (
-            <Input
-              type="search"
-              placeholder="Search collections..."
-              value={searchValue}
-              onChange={e => setSearchValue(e.target.value)}
-            />
-          )}
-          {filteredCollections.map(collection => (
+          collections.map(collection => (
             <div
               key={collection.id}
               className={`group p-3 rounded-lg cursor-pointer transition-colors ${
@@ -112,12 +94,7 @@ export function CollectionList({
                 </button>
               </div>
             </div>
-          ))}
-          {(filteredCollections.length === 0 && debouncedSearch) && (
-            <p className="text-sm text-muted-foreground px-2 py-4">No collections found for <span className="font-bold">"{debouncedSearch}"</span></p>
-          )}
-          <small className='text-xs text-muted-foreground p-1'>All collections are stored locally in your browser</small>
-          </>
+          ))
         )}
       </div>
 
@@ -136,7 +113,7 @@ export function CollectionList({
                   setDeleteId(null)
                 }
               }}
-              className="bg-destructive text-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>
