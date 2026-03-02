@@ -16,6 +16,7 @@ import {
 import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import type { ApiItem, ApiParam, ApiHeader } from '@/lib/types'
+import { JSONEditor } from './json-editor'
 
 interface ApiItemFormProps {
   item: ApiItem
@@ -37,6 +38,8 @@ export function ApiItemForm({ item, onSave, onCancel }: ApiItemFormProps) {
   const [formData, setFormData] = useState(item)
   const [newParam, setNewParam] = useState({ key: '', type: 'string' as const, description: '', enumValues: '' })
   const [newHeader, setNewHeader] = useState({ key: '', value: '' })
+  const [bodyError, setBodyError] = useState('')
+  const [responseError, setResponseError] = useState('')
 
   const supportsBody = !methodsWithoutBody.includes(formData.method)
   const supportsParams = formData.method !== 'HEAD'
@@ -295,12 +298,10 @@ export function ApiItemForm({ item, onSave, onCancel }: ApiItemFormProps) {
               Format
             </Button>
           </div>
-          <Textarea
-            id="body"
+          <JSONEditor
             value={formData.body}
-            onChange={e => setFormData({ ...formData, body: e.target.value })}
+            onChange={value => setFormData({ ...formData, body: value })}
             placeholder={'{\n  "key": "value"\n}'}
-            rows={6}
             className="font-mono text-sm"
           />
         </div>
@@ -321,12 +322,10 @@ export function ApiItemForm({ item, onSave, onCancel }: ApiItemFormProps) {
               Format
             </Button>
           </div>
-          <Textarea
-            id="response"
+          <JSONEditor
             value={formData.response}
-            onChange={e => setFormData({ ...formData, response: e.target.value })}
+            onChange={value => setFormData({ ...formData, response: value })}
             placeholder={'{\n  "success": true,\n  "data": {}\n}'}
-            rows={6}
             className="font-mono text-sm"
           />
         </div>
