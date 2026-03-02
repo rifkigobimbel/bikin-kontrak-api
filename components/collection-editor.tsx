@@ -48,6 +48,7 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
   const [copiedType, setCopiedType] = useState<string | null>(null)
   const [detailItem, setDetailItem] = useState<ApiItem | null>(null)
   const [isEditingBasePath, setIsEditingBasePath] = useState(false)
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
 
   const handleCreateItem = () => {
     const newItem: ApiItem = {
@@ -154,7 +155,36 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-3xl font-bold">{collection.title}</h2>
+          {isEditingTitle ? (
+            <div className="flex gap-2">
+              <Input
+                defaultValue={collection.title}
+                placeholder="Collection Title"
+                className="w-64 h-10 text-lg font-semibold"
+                onBlur={e => {
+                  onUpdate({ ...collection, title: e.target.value })
+                  setIsEditingTitle(false)
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    onUpdate({ ...collection, title: (e.target as HTMLInputElement).value })
+                    setIsEditingTitle(false)
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-bold">{collection.title || 'Untitled Collection'}</h2>
+              <button
+                onClick={() => setIsEditingTitle(true)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2 mt-2">
             <span className="text-sm text-muted-foreground">Base Path:</span>
             {isEditingBasePath ? (
