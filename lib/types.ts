@@ -27,6 +27,7 @@ export interface ApiItem {
 export interface Collection {
   id: string
   title: string
+  description?: string
   basePath: string
   items: ApiItem[]
   createdAt: string

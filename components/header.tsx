@@ -1,7 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { Trash2 } from 'lucide-react'
+import { Braces, Check, Copy, Download, FileDown, FileUp, Trash2 } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,20 +10,252 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ModeToggle } from './mode-toggle'
 import Link from 'next/link'
+import { Input } from './ui/input'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { toast } from 'sonner'
+import { Collection } from '@/lib/types'
+import { loadCollections, saveCollections } from '@/lib/indexeddb'
 
 interface HeaderProps {
   onClearAll?: () => void
+  onImportSuccess?: (collection: Collection) => void
 }
 
-export function Header({ onClearAll }: HeaderProps) {
+export function Header({ onClearAll, onImportSuccess }: HeaderProps) {
   const [showClearDialog, setShowClearDialog] = useState(false)
+  const [showImportConfirm, setShowImportConfirm] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [importData, setImportData] = useState<Collection | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const postmanFileRef = useRef<HTMLInputElement>(null)
 
   const handleClear = () => {
     onClearAll?.()
     setShowClearDialog(false)
+  }
+
+  const handleImportKontrak = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if(!file.name.endsWith('.kontrak-api.json')){
+      toast.info('File must exportted from bikin-kontrak-api (formated .kontrak-api.json)')
+      return
+    }
+
+    setIsLoading(true)
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string) as Collection
+        
+        // Validate basic structure
+        if (!data.title || !data.id || !Array.isArray(data.items)) {
+          toast.error('Invalid collection format')
+          setIsLoading(false)
+          return
+        }
+
+        const existingCollections = await loadCollections()
+        const isExist = existingCollections.some(col => col.title === data.title)
+
+        if (isExist) {
+          setImportData(data)
+          setShowImportConfirm(true)
+        } else {
+          // No collision, just save
+          const newCollections = [...existingCollections, data]
+          await saveCollections(newCollections)
+          onImportSuccess?.(data)
+          toast.success('Collection imported successfully')
+        }
+      } catch (err) {
+        toast.error('Failed to parse file')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    reader.onerror = () => {
+      toast.error('Failed to read file')
+      setIsLoading(false)
+    }
+    reader.readAsText(file)
+    
+    // Clear the input value so the same file can be imported again if needed
+    if (fileRef.current) {
+      fileRef.current.value = ''
+    }
+  }
+
+  const handleConfirmImport = async () => {
+    if (!importData) return
+    setIsLoading(true)
+    try {
+      const existingCollections = await loadCollections()
+      let newTitle = importData.title
+      let counter = 2
+      
+      while (existingCollections.some(col => col.title === newTitle)) {
+        newTitle = `${importData.title} v${counter}`
+        counter++
+      }
+
+      const newCollection = {
+        ...importData,
+        id: Date.now().toString(), // Give it a new ID to avoid ID collision
+        title: newTitle
+      }
+      
+      const newCollections = [...existingCollections, newCollection]
+      await saveCollections(newCollections)
+      onImportSuccess?.(newCollection)
+      toast.success(`Imported as ${newTitle}`)
+    } catch (err) {
+      toast.error('Failed to import collection')
+    } finally {
+      setIsLoading(false)
+      setShowImportConfirm(false)
+      setImportData(null)
+    }
+  }
+
+  const handleImportPostman = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if(!file.name.endsWith('.json')){
+      toast.info('File must be a JSON file')
+      return
+    }
+
+    setIsLoading(true)
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string)
+        
+        // Validate basic structure for Postman v2.1.0 or v2.0.0
+        if (!data.info || !data.info.name || !Array.isArray(data.item)) {
+          toast.error('Invalid Postman collection format')
+          setIsLoading(false)
+          return
+        }
+
+        const extractItems = (items: any[]): any[] => {
+          let flatItems: any[] = []
+          for (const item of items) {
+            if (item.item && Array.isArray(item.item)) {
+              flatItems = [...flatItems, ...extractItems(item.item)]
+            } else if (item.request) {
+              flatItems.push(item)
+            }
+          }
+          return flatItems
+        }
+
+        const flatRequests = extractItems(data.item)
+
+        const newCollection: Collection = {
+          id: Date.now().toString(),
+          title: data.info.name,
+          basePath: '',
+          items: flatRequests.map((item: any, index: number) => {
+            let reqUrl = ''
+            if (item.request?.url) {
+              if (typeof item.request.url === 'string') {
+                reqUrl = item.request.url
+              } else if (item.request.url.raw) {
+                reqUrl = item.request.url.raw
+              }
+            }
+
+            let path = reqUrl
+            try {
+              if (reqUrl.startsWith('http')) {
+                 const urlObj = new URL(reqUrl)
+                 path = urlObj.pathname + (urlObj.search || '')
+              }
+            } catch(e) {}
+
+            let method = item.request?.method?.toUpperCase() || 'GET'
+            
+            const headers = (item.request?.header || []).map((h: any) => ({
+              key: h.key || '',
+              value: h.value || ''
+            }))
+
+            let body = ''
+            if (item.request?.body?.mode === 'raw') {
+              body = item.request.body.raw || ''
+            } else if (item.request?.body?.mode === 'urlencoded') {
+              body = (item.request.body.urlencoded || []).map((p: any) => `${p.key}=${p.value}`).join('&')
+            } else if (item.request?.body?.mode === 'formdata') {
+              body = (item.request.body.formdata || []).map((p: any) => `${p.key}=${p.value}`).join('\\n')
+            }
+
+            // Map params if any in url.query
+            const params: any[] = []
+            if (item.request?.url?.query && Array.isArray(item.request.url.query)) {
+              for (const q of item.request.url.query) {
+                 params.push({
+                   key: q.key || '',
+                   type: 'string', // Default fallback
+                   description: q.description || ''
+                 })
+              }
+            }
+
+            return {
+              id: Date.now().toString() + index + Math.random().toString(36).substr(2, 5),
+              title: item.name || 'Untitled Request',
+              description: item.request?.description || '',
+              method: method as any,
+              path: path,
+              params: params,
+              body: body,
+              response: '',
+              headers: headers
+            }
+          }),
+          createdAt: new Date().toISOString()
+        }
+
+        const existingCollections = await loadCollections()
+        const isExist = existingCollections.some(col => col.title === newCollection.title)
+
+        if (isExist) {
+          setImportData(newCollection)
+          setShowImportConfirm(true)
+        } else {
+          // No collision, just save
+          const newCollections = [...existingCollections, newCollection]
+          await saveCollections(newCollections)
+          onImportSuccess?.(newCollection)
+          toast.success('Postman collection imported successfully')
+        }
+      } catch (err) {
+        toast.error('Failed to parse file')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    reader.onerror = () => {
+      toast.error('Failed to read file')
+      setIsLoading(false)
+    }
+    reader.readAsText(file)
+    
+    // Clear the input value so the same file can be imported again if needed
+    if (postmanFileRef.current) {
+      postmanFileRef.current.value = ''
+    }
+  }
+
+  const importPostman = () => {
+    postmanFileRef.current?.click()
   }
 
   return (
@@ -43,6 +275,34 @@ export function Header({ onClearAll }: HeaderProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2" disabled={isLoading}>
+                    <FileDown className="w-4 h-4" />
+                    {isLoading ? 'Importing...' : 'Import'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="gap-2" asChild onClick={e => {
+                    e.preventDefault()
+                    fileRef.current?.click()
+                  }}>
+                    <label htmlFor="import">
+                      <FileDown className="w-4 h-4" />
+                      Kontrak API Collection
+                    </label>
+                </DropdownMenuItem>
+                  <DropdownMenuItem className="gap-2" asChild onClick={e => {
+                    e.preventDefault()
+                    importPostman()
+                  }}>
+                    <label htmlFor="import-postman">
+                      <Braces className="w-4 h-4" />
+                      Postman Collection
+                    </label>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
               asChild
               size={"icon"}
@@ -57,12 +317,11 @@ export function Header({ onClearAll }: HeaderProps) {
             {onClearAll && (
               <Button
                 variant="destructive"
-                size="sm"
+                size="icon"
                 onClick={() => setShowClearDialog(true)}
                 className="gap-2"
               >
                 <Trash2 className="w-4 h-4" />
-                Clear All
               </Button>
             )}
             </div>
@@ -87,6 +346,37 @@ export function Header({ onClearAll }: HeaderProps) {
           </div>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={showImportConfirm} onOpenChange={setShowImportConfirm}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Collection Already Exists</AlertDialogTitle>
+          <AlertDialogDescription>
+            A collection with the title "{importData?.title}" already exists. 
+            Do you want to import this as a new version?
+          </AlertDialogDescription>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel
+              disabled={isLoading}
+              onClick={() => {
+                setShowImportConfirm(false);
+                setImportData(null);
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmImport}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Importing...' : 'Import as New Version'}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
+      <Input ref={fileRef} type="file" accept='.kontrak-api.json' id="import" className="sr-only" onChange={handleImportKontrak} />
+      <Input ref={postmanFileRef} type="file" accept='.json' id="import-postman" className="sr-only" onChange={handleImportPostman} />
     </>
   )
 }

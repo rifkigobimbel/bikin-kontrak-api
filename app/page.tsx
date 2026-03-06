@@ -77,6 +77,12 @@ export default function Home() {
     setShowEditor(false)
   }
 
+  const handleImportSuccess = (collection: Collection) => {
+    setCollections(prev => [...prev, collection])
+    setSelectedCollection(collection)
+    setShowEditor(true)
+  }
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -87,7 +93,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header onClearAll={handleClearAll} />
+      <Header onClearAll={handleClearAll} onImportSuccess={handleImportSuccess} />
       <div className="flex gap-6 p-6 max-w-7xl mx-auto">
         <div className="w-full md:w-80 flex-shrink-0">
           <CollectionList

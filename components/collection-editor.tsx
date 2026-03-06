@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, FileJson, FileText, Download, Copy, Edit2, Trash2, Check, Eye, X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, FileJson, FileText, Download, Copy, Edit2, Trash2, Check, Eye, X, Share, Import, FileUp, FileDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -25,6 +25,9 @@ import { ApiItemForm } from '@/components/api-item-form'
 import { exportAsMarkdown, exportAsPostman, exportAsTypeScript, downloadFile } from '@/lib/export'
 import type { Collection, ApiItem } from '@/lib/types'
 import { useDebounce } from '@/hooks/use-debounce'
+import { Textarea } from './ui/textarea'
+import { Label } from './ui/label'
+import { toast } from 'sonner'
 
 interface CollectionEditorProps {
   collection: Collection
@@ -50,7 +53,21 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
   const [isEditingBasePath, setIsEditingBasePath] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [searchValue, setSearchValue] = useState('')
+  const [generalDesc, setGeneralDesc] = useState(collection.description || '')
   const debouncedSearch = useDebounce(searchValue, 300)
+
+  useEffect(() => {
+    setGeneralDesc(collection.description || '')
+  }, [collection.id, collection.description])
+
+  const handleSaveDescription = (e: React.FormEvent) => {
+    e.preventDefault()
+    onUpdate({
+      ...collection,
+      description: generalDesc,
+    })
+    toast.success('Description saved')
+  }
 
   const filteredItems = debouncedSearch
     ? collection.items.filter(item =>
@@ -146,6 +163,15 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
       basePath,
     })
     setIsEditingBasePath(false)
+  }
+
+  const handleExport = (action: 'download' | 'copy') => {
+    const json = JSON.stringify(collection, null, 2)
+    if (action === 'download') {
+      downloadFile(json, `${collection.title.replace(/\s+/g, '-').toLowerCase()}.kontrak-api.json`, 'application/json')
+    } else {
+      copyToClipboard(json, 'export')
+    }
   }
 
   if (editingItem) {
@@ -313,12 +339,58 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
             </DropdownMenuContent>
           </DropdownMenu>
 
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <FileUp className="w-4 h-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport('download')} className="gap-2">
+                <Download className="w-4 h-4" />
+                Download
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('copy')} className="gap-2">
+                {copiedType === 'export' ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy to Clipboard
+                  </>
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" onClick={handleCreateItem} className="gap-2">
             <Plus className="w-4 h-4" />
             Add Endpoint
           </Button>
         </div>
       </div>
+
+
+      <form className='my-4 w-full space-y-2' onSubmit={handleSaveDescription}>
+        <Label htmlFor='general-description'>General description (markdown)</Label>
+        <Textarea 
+          id='general-description' 
+          className='w-full' 
+          placeholder='Describe this API collection...' 
+          value={generalDesc}
+          onChange={(e) => setGeneralDesc(e.target.value)}
+        />
+        {generalDesc !== (collection.description || '') && (
+          <Button 
+            type="submit" 
+          >
+            Save Changes
+          </Button>
+        )}
+      </form>
 
       <Separator />
 
@@ -327,7 +399,6 @@ export function CollectionEditor({ collection, onUpdate, onClose }: CollectionEd
           <Input type='search' placeholder="Search endpoints..." value={searchValue} onChange={e => setSearchValue(e.target.value)} />
         </div>
       )}
-      
 
       {/* API Items List - Grouped by Module */}
       <div className="space-y-6">
