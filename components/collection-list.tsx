@@ -136,7 +136,7 @@ export function CollectionList({
                   setDeleteId(null)
                 }
               }}
-              className="bg-destructive text-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>
