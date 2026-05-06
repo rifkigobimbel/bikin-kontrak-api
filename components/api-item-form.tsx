@@ -24,6 +24,13 @@ interface ApiItemFormProps {
   onCancel: () => void
 }
 
+interface ResponseField {
+  key: string
+  type: string
+  description: string
+  enumValues: string
+}
+
 const methodsWithoutBody = ['GET', 'DELETE', 'HEAD', 'OPTIONS']
 
 function formatJSON(json: string): string {
@@ -34,12 +41,51 @@ function formatJSON(json: string): string {
   }
 }
 
+function responseFieldsToJSON(fields: ResponseField[]): string {
+  if (fields.length === 0) return ''
+  const obj: Record<string, string> = {}
+  for (const f of fields) {
+    let value = f.type === 'enum' && f.enumValues
+      ? `enum(${f.enumValues})`
+      : f.type
+    if (f.description.trim()) value += ` // ${f.description.trim()}`
+    obj[f.key] = value
+  }
+  return JSON.stringify(obj, null, 2)
+}
+
+function jsonToResponseFields(json: string): ResponseField[] {
+  try {
+    const parsed = JSON.parse(json)
+    return Object.entries(parsed).map(([key, raw]) => {
+      const str = String(raw)
+      const commentIdx = str.indexOf('//')
+      const withoutComment = commentIdx !== -1 ? str.slice(0, commentIdx).trim() : str.trim()
+      const description = commentIdx !== -1 ? str.slice(commentIdx + 2).trim() : ''
+      const enumMatch = withoutComment.match(/^enum\((.+)\)$/)
+      if (enumMatch) {
+        return { key, type: 'enum', description, enumValues: enumMatch[1] }
+      }
+      return { key, type: withoutComment, description, enumValues: '' }
+    })
+  } catch {
+    return []
+  }
+}
+
 export function ApiItemForm({ item, onSave, onCancel }: ApiItemFormProps) {
   const [formData, setFormData] = useState(item)
   const [newParam, setNewParam] = useState({ key: '', type: 'string' as const, description: '', enumValues: '' })
   const [newHeader, setNewHeader] = useState({ key: '', value: '' })
   const [bodyError, setBodyError] = useState('')
-  const [responseError, setResponseError] = useState('')
+
+  // Response schema as structured fields
+  const [responseFields, setResponseFields] = useState<ResponseField[]>(() =>
+    jsonToResponseFields(item.response)
+  )
+  const [newResponseField, setNewResponseField] = useState<ResponseField>({
+    key: '', type: 'string', description: '', enumValues: '',
+  })
 
   const supportsBody = !methodsWithoutBody.includes(formData.method)
   const supportsParams = formData.method !== 'HEAD'
@@ -76,6 +122,20 @@ export function ApiItemForm({ item, onSave, onCancel }: ApiItemFormProps) {
       ...formData,
       headers: formData.headers.filter((_, i) => i !== index),
     })
+  }
+
+  const handleAddResponseField = () => {
+    if (!newResponseField.key.trim()) return
+    const updated = [...responseFields, newResponseField]
+    setResponseFields(updated)
+    setFormData({ ...formData, response: responseFieldsToJSON(updated) })
+    setNewResponseField({ key: '', type: 'string', description: '', enumValues: '' })
+  }
+
+  const handleRemoveResponseField = (index: number) => {
+    const updated = responseFields.filter((_, i) => i !== index)
+    setResponseFields(updated)
+    setFormData({ ...formData, response: responseFieldsToJSON(updated) })
   }
 
   const handleSave = () => {
@@ -307,27 +367,99 @@ export function ApiItemForm({ item, onSave, onCancel }: ApiItemFormProps) {
         </div>
         )}
 
-        {/* Response */}
+        {/* Response Schema */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <Label htmlFor="response">Response (JSON)</Label>
+          <h4 className="font-semibold mb-3">Response Schema</h4>
+
+          {/* Added fields list */}
+          {responseFields.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {responseFields.map((field, idx) => (
+                <div key={idx} className="flex items-start gap-2 p-2 bg-muted rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-mono">{field.key}</p>
+                      <span className="text-xs px-2 py-0.5 bg-background rounded text-muted-foreground">
+                        {field.type === 'enum' ? `enum(${field.enumValues})` : field.type}
+                      </span>
+                    </div>
+                    {field.description && (
+                      <p className="text-xs text-muted-foreground italic mt-1">{field.description}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleRemoveResponseField(idx)}
+                    className="text-destructive hover:text-destructive/80 transition-colors p-1 flex-shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* New field inputs */}
+          <div className="grid gap-2">
+            {/* Row: key + type */}
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                placeholder="Field name (key)"
+                value={newResponseField.key}
+                onChange={e => setNewResponseField({ ...newResponseField, key: e.target.value })}
+              />
+              <Select
+                value={newResponseField.type}
+                onValueChange={type => setNewResponseField({ ...newResponseField, type, enumValues: '' })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="string">String</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="boolean">Boolean</SelectItem>
+                  <SelectItem value="object">Object</SelectItem>
+                  <SelectItem value="array">Array</SelectItem>
+                  <SelectItem value="enum">Enum</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Enum values input (visible only when type = enum) */}
+            {newResponseField.type === 'enum' && (
+              <Input
+                placeholder="Enum values (comma-separated, e.g. active, inactive, pending)"
+                value={newResponseField.enumValues}
+                onChange={e => setNewResponseField({ ...newResponseField, enumValues: e.target.value })}
+              />
+            )}
+
+            {/* Description */}
+            <Input
+              placeholder="Description (optional)"
+              value={newResponseField.description}
+              onChange={e => setNewResponseField({ ...newResponseField, description: e.target.value })}
+            />
+
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="sm"
-              onClick={() => setFormData({ ...formData, response: formatJSON(formData.response) })}
-              className="h-6 px-2 text-xs gap-1"
+              onClick={handleAddResponseField}
+              className="w-full"
             >
-              <Wand2 className="w-3 h-3" />
-              Format
+              <Plus className="w-4 h-4 mr-2" />
+              Add Field
             </Button>
           </div>
-          <JSONEditor
-            value={formData.response}
-            onChange={value => setFormData({ ...formData, response: value })}
-            placeholder={'{\n  "success": true,\n  "data": {}\n}'}
-            className="font-mono text-sm"
-          />
+
+          {/* JSON preview */}
+          {formData.response && (
+            <div className="mt-3">
+              <p className="text-xs text-muted-foreground mb-1">Preview JSON:</p>
+              <pre className="text-xs bg-muted rounded-md p-3 overflow-auto max-h-40 font-mono">{formData.response}</pre>
+            </div>
+          )}
         </div>
       </div>
 
